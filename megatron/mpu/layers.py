@@ -78,6 +78,16 @@ def copy_tensor_model_parallel_attributes(destination_tensor, source_tensor):
         maybe_copy(attribute)
 
 
+def set_expert_model_parallel_attributes(tensor, is_parallel):
+    assert not hasattr(tensor, 'expert_model_parallel')
+    setattr(tensor, 'expert_model_parallel', is_parallel)
+
+
+def param_is_expert_model_parallel(param):
+    return (hasattr(param, 'expert_model_parallel') and
+            param.expert_model_parallel)
+
+
 def _initialize_affine_weight_gpu(weight, init_method,
                                   partition_dim, stride=1):
     """Initialize affine weight for model parallel on GPU."""
@@ -216,7 +226,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
         ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
         ctx.async_grad_allreduce = async_grad_allreduce
         ctx.sequence_parallel = sequence_parallel
-      
+
         if sequence_parallel:
             world_size = get_tensor_model_parallel_world_size()
             dim_size = list(input.size())
@@ -241,7 +251,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
     def backward(ctx, grad_output):
         input, weight = ctx.saved_tensors
         use_bias = ctx.use_bias
-        
+
         if ctx.sequence_parallel:
             world_size = get_tensor_model_parallel_world_size()
             dim_size = list(input.size())
@@ -270,7 +280,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
                                        grad_output.shape[2])
         total_input = total_input.view(total_input.shape[0] * total_input.shape[1],
 				       total_input.shape[2])
- 
+
         if ctx.async_grad_allreduce:
             # Asynchronous all-reduce
             handle = torch.distributed.all_reduce(
@@ -278,7 +288,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
             # Delay the start of weight gradient computation shortly (3us) to have
             # all-reduce scheduled first and have GPU resources allocated
             _ = torch.empty(1, device=grad_output.device) + 1
- 
+
         if ctx.sequence_parallel:
             assert not ctx.async_grad_allreduce
             dim_size = list(input.size())
@@ -286,13 +296,13 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
                                          device=torch.cuda.current_device(),
                                          requires_grad=False)
             # reduce_scatter
-            handle = torch.distributed._reduce_scatter_base(sub_grad_input, grad_input, 
+            handle = torch.distributed._reduce_scatter_base(sub_grad_input, grad_input,
                                                             group=get_tensor_model_parallel_group(),
                                                             async_op=True)
             # Delay the start of weight gradient computation shortly (3us) to have
             # reduce scatter scheduled first and have GPU resources allocated
             _ = torch.empty(1, device=grad_output.device) + 1
-        
+
 
         if ctx.gradient_accumulation_fusion:
             import fused_dense_cuda
