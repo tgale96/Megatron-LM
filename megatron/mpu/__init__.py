@@ -57,7 +57,8 @@ from .layers import (set_tensor_model_parallel_attributes,
                      set_defaults_if_not_set_tensor_model_parallel_attributes,
                      copy_tensor_model_parallel_attributes)
 from .layers import (set_expert_model_parallel_attributes,
-                     param_is_expert_model_parallel)
+                     param_is_expert_model_parallel,
+                     copy_expert_model_parallel_attributes)
  
 from .mappings import  copy_to_tensor_model_parallel_region
 from .mappings import  reduce_from_tensor_model_parallel_region
