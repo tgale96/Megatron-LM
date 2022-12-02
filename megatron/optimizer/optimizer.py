@@ -35,6 +35,7 @@ from megatron.utils import unwrap_model
 
 from .clip_grads import clip_grad_norm_fp32, count_zeros_fp32
 
+_SPARSE_WEIGHTS = []
 
 def _zero_grad_group_helper(group, set_to_none):
     """Zero out the gradient for a group of parameters.
@@ -778,3 +779,16 @@ class FP32Optimizer(MegatronOptimizer):
 
     def load_state_dict(self, state_dict):
         self.optimizer.load_state_dict(state_dict)
+
+class SETOptimizer():
+    def __init__(self, optimizer, model):
+        self.__class__ = type(optimizer.__class__.__name__,
+                            (self.__class__, optimizer.__class__),
+                            {})
+        self.__dict__ = optimizer.__dict__
+        
+        print(f"SET implementation: {len(_SPARSE_WEIGHTS)}")
+
+def add_sparse_weights(weights):
+    global _SPARSE_WEIGHTS
+    _SPARSE_WEIGHTS.append(weights)

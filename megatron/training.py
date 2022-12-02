@@ -53,6 +53,7 @@ from megatron.schedules import get_forward_backward_func
 from megatron.utils import report_memory
 from megatron.model.vision.knn_monitor import compute_feature_bank
 
+from megatron.optimizer import SETOptimizer
 
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
@@ -370,6 +371,7 @@ def setup_model_and_optimizer(model_provider_func,
     optimizer = get_megatron_optimizer(model, no_wd_decay_cond,
                                        scale_lr_cond, lr_mult)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
+    optimizer = SETOptimizer(optimizer, unwrapped_model)
 
     if args.load is not None:
         timers = get_timers()
