@@ -53,7 +53,7 @@ from megatron.schedules import get_forward_backward_func
 from megatron.utils import report_memory
 from megatron.model.vision.knn_monitor import compute_feature_bank
 
-from megatron.optimizer import SETOptimizer
+from megatron.optimizer import SETOptimizer, print_sparse_matrices, save_mask
 
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
@@ -716,6 +716,8 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                        model,
                        optimizer,
                        opt_param_scheduler)
+        optimizer.set_weights_update(update_nblocks=10)
+        save_mask(iteration)
         iteration += 1
         args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \

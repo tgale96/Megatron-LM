@@ -21,7 +21,7 @@ from megatron import get_args
 from .distrib_optimizer import DistributedOptimizer
 from .grad_scaler import ConstantGradScaler, DynamicGradScaler
 from .optimizer import Float16OptimizerWithFloat16Params, FP32Optimizer
-from .optimizer import SETOptimizer, add_sparse_weights
+from .optimizer import SETOptimizer, add_sparse_matrix, print_sparse_matrices, save_mask, set_init_method
 
 
 def get_param_groups(modules,
