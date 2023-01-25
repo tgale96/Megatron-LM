@@ -371,7 +371,7 @@ def setup_model_and_optimizer(model_provider_func,
     optimizer = get_megatron_optimizer(model, no_wd_decay_cond,
                                        scale_lr_cond, lr_mult)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
-    optimizer = SETOptimizer(optimizer, unwrapped_model)
+    optimizer = SETOptimizer(optimizer)
 
     if args.load is not None:
         timers = get_timers()
@@ -716,8 +716,10 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                        model,
                        optimizer,
                        opt_param_scheduler)
-        optimizer.set_weights_update(update_nblocks=10)
-        save_mask(iteration)
+        if optimizer.enable_set_update:
+            if iteration >= optimizer.set_start_step and iteration < optimizer.set_end_step and \
+                iteration % optimizer.set_frequency == 0:
+                optimizer.set_weights_update()
         iteration += 1
         args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \

@@ -832,11 +832,17 @@ def _transpose(size, data, row_indices, column_indices, offsets):
         return column_indices_t, offsets_t, block_offsets_t
 
 class SETOptimizer():
-    def __init__(self, optimizer, model):
+    def __init__(self, optimizer):
         self.__class__ = type(optimizer.__class__.__name__,
                             (self.__class__, optimizer.__class__),
                             {})
-        self.__dict__ = optimizer.__dict__   
+        self.__dict__ = optimizer.__dict__
+        args = get_args()
+        self.enable_set_update = args.enable_set
+        self.set_frequency = args.set_frequency
+        self.set_start_step =  args.set_start_step
+        self.set_end_step = args.set_end_step
+        self.update_nblocks = args.set_update_nblocks
 
     def _add_weights(self, size, blocking, row_indices, col_indices, update_nblocks):
         block_rows, block_cols = size[0]//blocking, size[1]//blocking
@@ -846,7 +852,7 @@ class SETOptimizer():
         new_nnz_indices = random.sample(zero_indices, update_nblocks)
         return new_nnz_indices
 
-    def set_weights_update(self, update_nblocks=1, init_method=None):
+    def set_weights_update(self, init_method=None):
         if not init_method:
             init_method = _INIT_METHOD
 
@@ -854,12 +860,12 @@ class SETOptimizer():
         for matrix in _SPARSE_MATRICES:
             block_sums = torch.sum(torch.abs(matrix.data), (-2, -1))
             min_block_values, min_block_indices = torch.topk(
-                input=block_sums, k=update_nblocks, dim=0, largest=False)
+                input=block_sums, k=self.update_nblocks, dim=0, largest=False)
 
             row_indices = matrix.row_indices
             col_indices = matrix.column_indices
             new_nnz_indices = self._add_weights(matrix.size(), matrix.blocking, 
-                row_indices, col_indices, update_nblocks)
+                row_indices, col_indices, self.update_nblocks)
             
             dense_matrix = stk.ops.to_dense(matrix)
             block_dim = matrix.blocking
@@ -876,72 +882,12 @@ class SETOptimizer():
                 dense_matrix[row_idx*block_dim: (row_idx + 1)*block_dim, 
                     col_idx*block_dim: (col_idx + 1)*block_dim] = new_weights
             
-            ## TODO(Priya): Does this assignment work?
-            new_matrix = stk.ops.to_sparse(dense_matrix)
-            matrix._data.copy_(new_matrix.data)
-            matrix._row_indices.copy_(new_matrix.row_indices)
-            matrix._column_indices.copy_(new_matrix.column_indices)
-            matrix._offsets.copy_(new_matrix.offsets)
-            matrix._column_indices_t.copy_(new_matrix.column_indices_t)
-            matrix._offsets_t.copy_(new_matrix.offsets_t)
-            matrix._block_offsets_t.copy_(new_matrix.block_offsets_t)
-            
-        ## SET update: Without converting to dense matrix
-        # for matrix in _SPARSE_MATRICES:
-        #     block_sums = torch.sum(torch.abs(matrix.data), (-2, -1))
-        #     min_block_values, min_block_indices = torch.topk(
-        #         input=block_sums, k=update_nblocks, dim=0, largest=False)
-
-        #     row_indices = matrix.row_indices
-        #     col_indices = matrix.column_indices
-        #     offsets = matrix.offsets
-
-        #     # Randomly select new blocks to activate
-        #     new_nnz_indices = self._add_weights(matrix.size(), matrix.blocking, 
-        #         row_indices, col_indices, update_nblocks)
-            
-        #     # Remove the smallest weights
-        #     mask = torch.ones(len(row_indices), dtype=torch.bool)
-        #     mask[min_block_indices] = False
-
-        #     data = matrix.data[mask]
-        #     row_indices = row_indices[mask]
-        #     col_indices = col_indices[mask]
-
-        #     # Initialize the same number of new weights
-        #     new_weights = torch.nn.Parameter(
-        #         torch.empty((update_nblocks, matrix.blocking, matrix.blocking),
-        #         dtype=matrix.dtype, device=matrix.device)
-        #         )
-        #     init_method(new_weights)
-        #     new_nnz_row_indices = torch.tensor(list(zip(*new_nnz_indices))[0], 
-        #         dtype = row_indices.dtype, device=row_indices.device)
-        #     new_nnz_col_indices = torch.tensor(list(zip(*new_nnz_indices))[1], 
-        #         dtype = col_indices.dtype, device=col_indices.device)
-            
-        #     # Compute the matrix data and metadata
-        #     data = torch.cat((data, new_weights))
-        #     row_indices = torch.cat((row_indices, new_nnz_row_indices))
-        #     col_indices = torch.cat((col_indices, new_nnz_col_indices))
-
-        #     idxs = torch.argsort(row_indices)
-        #     data = data[idxs]
-        #     row_indices = row_indices[idxs]
-        #     col_indices = col_indices[idxs]
-
-        #     # print(data.shape, row_indices, len(col_indices))
-
-        #     zeros = torch.zeros((1,), dtype=offsets.dtype, device=offsets.device)
-        #     offsets = torch.cat([zeros, torch.cumsum(row_indices, 
-        #         dim=0, dtype=offsets.dtype)])
-        #     column_indices_t, offsets_t, block_offsets_t = _transpose(
-        #         matrix.size(), data, row_indices, col_indices, offsets)
-
-        #     # Update the matrix data and metadata
-        #     matrix._data = torch.nn.Parameter(data)
-        #     matrix._row_indices = row_indices
-        #     matrix._column_indices = col_indices
-        #     matrix._offsets = offsets
-        #     matrix._column_indices_t = column_indices_t
-        #     matrix._offsets_t = offsets_t
-        #     matrix._block_offsets_t = block_offsets_t
+            new_matrix = stk.ops.to_sparse(dense_matrix, matrix.blocking)
+            with torch.no_grad():
+                matrix._data.copy_(new_matrix.data)
+                matrix._row_indices.copy_(new_matrix.row_indices)
+                matrix._column_indices.copy_(new_matrix.column_indices)
+                matrix._offsets.copy_(new_matrix.offsets)
+                matrix._column_indices_t.copy_(new_matrix.column_indices_t)
+                matrix._offsets_t.copy_(new_matrix.offsets_t)
+                matrix._block_offsets_t.copy_(new_matrix.block_offsets_t)
